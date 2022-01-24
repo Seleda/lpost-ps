@@ -1,0 +1,22 @@
+{
+    "name": "seleda/lpost-ps",
+    "version": "1.0.0",
+    "description": "Prestashop package for L-Post",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Seleda\\LPostPs\\": "src/",
+            "Seleda\\LPostPs\\Carrier\\": "src/carrier/"
+        }
+    },
+    "license": [
+        "MIT"
+    ],
+    "authors": [
+        {
+            "name": "seleda",
+            "email": "p.seleda@gmail.com"
+        }
+    ],
+    "require": {}
+}
