@@ -4,6 +4,7 @@
 namespace Seleda\LPostPs;
 
 use \ObjectModel;
+use \ToolsModuleLP;
 
 class PickupPoint extends ObjectModel
 {
@@ -39,7 +40,7 @@ class PickupPoint extends ObjectModel
             'PickupDop' => ['type' => self::TYPE_STRING, 'validate' => 'isString'],
             'Metro' => ['type' => self::TYPE_STRING, 'validate' => 'isString'],
             'Photo' => ['type' => self::TYPE_STRING, 'validate' => 'isJson'],
-            'PickupPointWorkHours' => ['type' => self::TYPE_STRING, 'validate' => 'isJson'],
+            'PickupPointWorkHours' => ['type' => self::TYPE_STRING, 'validate' => 'isString'],
             'Zone' => ['type' => self::TYPE_STRING, 'validate' => 'isJson'],
             'ID_Region' => ['type' => self::TYPE_INT, 'validate' => 'isInt'],
             'CityName' => ['type' => self::TYPE_STRING, 'validate' => 'isCityName', 'required' => true],
@@ -55,10 +56,19 @@ class PickupPoint extends ObjectModel
         $this->Zone = json_decode($this->Zone, true);
     }
 
+    public static function jsonDecodeFields($points) {
+        foreach ($points as &$point) {
+            $point['Photo'] = json_decode($point['Photo'], true);
+            $point['Zone'] = json_decode($point['Zone'], true);
+        }
+
+        return $points;
+    }
+
     private function toStringFields()
     {
         $this->Photo = json_encode($this->Photo);
-        $this->PickupPointWorkHours = json_encode($this->PickupPointWorkHours);
+        $this->PickupPointWorkHours = ToolsModuleLP::formatWorkHours($this->PickupPointWorkHours);
         $this->Zone = json_encode($this->Zone);
     }
 
@@ -72,5 +82,10 @@ class PickupPoint extends ObjectModel
     {
         $this->toStringFields();
         return parent::update($null_values);
+    }
+
+    public function getFullAddress($type, $PickupDop = false)
+    {
+        return $this->CityName.', '.$this->Address.($PickupDop ? ', '.$this->PickupDop : '');
     }
 }

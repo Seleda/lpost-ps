@@ -26,47 +26,44 @@
 
 namespace Seleda\LPostPs;
 
+use \Order as OrderPs;
+use \Cart as CartPs;
+use \Product;
+use \Combination;
+use \Db;
+use \Tools;
+
 class Cart
 {
     private static $instance;
-    public $id_cart;
-    public $lang;
+
+    /**
+     * Source for lpost cart
+     * @var string cart or order
+     */
+    public $source;
+
     public $currency;
+
     public $id_address_delivery;
+
     public $order_total;
-    public $products = array();
 
-    private function __construct($cart)
+    private $products = array();
+
+    private function __construct($obj)
     {
-        $this->id_address_delivery = $cart->id_address_delivery;
-        $this->currency = CurrencyCdek::getCurrency($cart->id_currency);
-        $this->lang = LangCdek::getInstance($cart->id_lang)->getLang();
+        $this->id_address_delivery = $obj->id_address_delivery;
+        $this->currency = Currency::getCurrency($obj->id_currency);
     }
 
-    public static function getInstance($cart)
+    public function createFromOrder(OrderPs $order)
     {
-        if (!self::$instance) {
-            self::$instance = new CartCdek($cart);
-            if ($cart->orderExists()) {
-                if (method_exists('Order', 'getByCartId')) {
-                    $order = Order::getByCartId($cart->id);
-                } else {
-                    $id_order = Order::getOrderByCartId($cart->id);
-                    $order = new Order($id_order);
-                }
-                self::$instance->createFromOrder($order);
-            } else {
-                self::$instance->createFromCart($cart);
-            }
-        }
-        return self::$instance;
-    }
+        $obj = new self($order);
+        $obj->source = 'order';
+        $obj->id_cart = $order->id_cart;
 
-    private function createFromOrder($order)
-    {
-        $this->id_cart = $order->id_cart;
-
-        $this->order_total = $order->total_products_wt;
+        $obj->order_total = $order->total_products_wt;
 
         $order_detail = $order->getOrderDetailList();
 
@@ -80,65 +77,45 @@ class Cart
             $product['id_category'] = $product_obj->id_category_default;
             $product['id_product_attribute'] = $product['product_attribute_id'];
 
-            $this->products[$key]['id_product'] = $product['product_id'];
-            $this->products[$key]['id_product_attribute'] = $product['product_attribute_id'];
-            $this->products[$key]['cart_quantity'] = $product['product_quantity'];
-            $this->products[$key]['name'] = $product['product_name'];
-            $this->products[$key]['reference'] = $product['product_reference'];
-            $this->products[$key]['id_category'] = $product['id_category'];
-            $this->products[$key]['price'] = $product['total_price_tax_incl'];
-            $this->products[$key]['cost'] = $product['original_product_price'];
-            $this->products[$key]['width'] = self::getProductDimension($product, 'width');
-            $this->products[$key]['height'] = self::getProductDimension($product, 'height');
-            $this->products[$key]['depth'] = self::getProductDimension($product, 'length');
-            $this->products[$key]['weight'] = self::getProductWeight($product);
+            $obj->products[$key]['id_product'] = $product['product_id'];
+            $obj->products[$key]['id_product_attribute'] = $product['product_attribute_id'];
+            $obj->products[$key]['cart_quantity'] = $product['product_quantity'];
+            $obj->products[$key]['name'] = $product['product_name'];
+            $obj->products[$key]['reference'] = $product['product_reference'];
+            $obj->products[$key]['id_category'] = $product['id_category'];
+            $obj->products[$key]['price'] = $product['total_price_tax_incl'];
+            $obj->products[$key]['cost'] = $product['original_product_price'];
+            $obj->products[$key]['width'] = self::getProductDimension($product, 'width');
+            $obj->products[$key]['height'] = self::getProductDimension($product, 'height');
+            $obj->products[$key]['depth'] = self::getProductDimension($product, 'length');
+            $obj->products[$key]['weight'] = self::getProductWeight($product);
         }
     }
 
-    private function createFromCart($cart)
+    public static function createFromCart(CartPs $cart)
     {
-        $this->id_cart = $cart->id;
+        $obj = new self($cart);
+        $obj->source = 'cart';
 
-        $this->order_total = $cart->getOrderTotal(true, Cart::ONLY_PRODUCTS, null, $cart->id_carrier);
+        $obj->order_total = $cart->getOrderTotal(true, CartPs::ONLY_PRODUCTS, null, $cart->id_carrier);
 
         $products = $cart->getProducts();
 
         foreach ($products as $key => $product) {
-            $product['id_category'] = $product['id_category_default'];
-            $this->products[$key]['id_product'] = $product['id_product'];
-            $this->products[$key]['id_product_attribute'] = $product['id_product_attribute'];
-            $this->products[$key]['cart_quantity'] = $product['cart_quantity'];
-            $this->products[$key]['name'] = $product['name'];
-            $this->products[$key]['reference'] = $product['reference'];
-            $this->products[$key]['id_category'] = $product['id_category'] = $product['id_category_default'];
-            $this->products[$key]['price'] = $product['total_wt'];
-            $this->products[$key]['cost'] = $product['price'];
-            $this->products[$key]['width'] = self::getProductDimension($product, 'width');
-            $this->products[$key]['height'] = self::getProductDimension($product, 'height');
-            $this->products[$key]['depth'] = self::getProductDimension($product, 'length');
-            $this->products[$key]['weight'] = self::getProductWeight($product);
+            $obj->products[$key]['id_product'] = $product['id_product'];
+            $obj->products[$key]['id_product_attribute'] = $product['id_product_attribute'];
+            $obj->products[$key]['cart_quantity'] = $product['cart_quantity'];
+            $obj->products[$key]['name'] = $product['name'];
+            $obj->products[$key]['reference'] = $product['reference'];
+            $obj->products[$key]['id_category'] = $product['id_category'] = $product['id_category_default'];
+            $obj->products[$key]['price'] = $product['total_wt'];
+            $obj->products[$key]['cost'] = $product['price'];
+            $obj->products[$key]['width'] = self::getProductDimension($product, 'width');
+            $obj->products[$key]['height'] = self::getProductDimension($product, 'height');
+            $obj->products[$key]['depth'] = self::getProductDimension($product, 'length');
+            $obj->products[$key]['weight'] = self::getProductWeight($product);
         }
-    }
-
-    public function getPackages()
-    {
-        $packages = array();
-        foreach ($this->products as $key => $product) {
-            $packages[$key] = array(
-                'weight' => $product['weight'] * $product['cart_quantity']
-            );
-
-//            if ($length = self::getProductDimension($product, 'length')) {
-//                if ($width = self::getProductDimension($product, 'width')) {
-//                    if ($height = self::getProductDimension($product, 'height')) {
-//                        $packages[$key]['length'] = $length;
-//                        $packages[$key]['width'] = $width;
-//                        $packages[$key]['height'] = $height;
-//                    }
-//                }
-//            }
-        }
-        return $packages;
+        return $obj;
     }
 
     public function getTotalWeight()
@@ -154,8 +131,8 @@ class Cart
     public static function getProductWeight($product)
     {
         $weight = 0;
-        ($weight_unit = ConfigurationCdek::get('weight_unit')) || ($weight_unit = 1); // 1 - gr or 1000 - kg // TODO lb 453,59237 g
-        ($volume_unit = ConfigurationCdek::get('volume_unit')) || ($volume_unit = 1); // 1 - sm or 0.1 - mm
+        ($weight_unit = Configuration::get('weight_unit')) || ($weight_unit = 1); // 1 - gr or 1000 - kg // TODO lb 453,59237 g
+        ($volume_unit = Configuration::get('volume_unit')) || ($volume_unit = 1); // 1 - sm or 0.1 - mm
 
         $impact = 0;
         if (Combination::isFeatureActive()) {
@@ -164,7 +141,7 @@ class Cart
                         WHERE `id_product_attribute` = '.(int)$product['id_product_attribute']);
         }
 
-        $default_categories = ConfigurationCdek::get('default_categories');
+        $default_categories = Configuration::get('default_categories');
 
         if ((float)$product['weight'] == 0 || $impact != 0) {
             $weight += $impact * $weight_unit;
@@ -178,14 +155,14 @@ class Cart
             $volume = $width * $height * $length / 5; // объемный вес
             $weight += round($volume);
         } else {
-            $default_categories = ConfigurationCdek::get('default_categories');
+            $default_categories = Configuration::get('default_categories');
             if (isset($default_categories[$product['id_category']]) && (int)$default_categories[$product['id_category']]['weight'] > 0) {
                 $weight += $default_categories[$product['id_category']]['weight'] * $weight_unit;
             }
         }
 
         if ($weight == 0) {
-            $weight = ConfigurationCdek::get('default_weight') * $weight_unit;
+            $weight = Configuration::get('default_weight') * $weight_unit;
         }
 
         return (int) Tools::ps_round($weight, 0);
@@ -198,9 +175,9 @@ class Cart
         if (isset($cache[$cache_key])) {
             return $cache[$cache_key];
         }
-        ($volume_unit = ConfigurationCdek::get('volume_unit')) || $volume_unit = 1; // 1 - sm or 0.1 - mm
+        ($volume_unit = Configuration::get('volume_unit')) || $volume_unit = 1; // 1 - sm or 0.1 - mm
 
-        $default_categories = ConfigurationCdek::get('default_categories');
+        $default_categories = Configuration::get('default_categories');
 
         $p_dimension = $dimension == 'length' ? 'depth' : $dimension;
 
@@ -209,7 +186,7 @@ class Cart
         } elseif (isset($default_categories[$product['id_category']]) && $default_categories[$product['id_category']][$dimension]) {
             $cache[$cache_key] = (int)$default_categories[$product['id_category']][$dimension] * $volume_unit;
         } elseif (!$for_weight) {
-            $cache[$cache_key] = (int)ConfigurationCdek::get('default_'.$dimension) * $volume_unit;
+            $cache[$cache_key] = (int)Configuration::get('default_'.$dimension) * $volume_unit;
         } else {
             $cache[$cache_key] = 0;
         }
@@ -220,11 +197,14 @@ class Cart
     /**
      * https://chilihelp.ru/portfolio/vychislenie-gabaritov-posylki-iz-neskolkikh-tovarov/
      */
-    public function getTotalDimensions($cell)
+    public function getTotalDimensions($cell = null)
     {
         $volume = 0;
         foreach ($this->products as $product) {
             $volume += $product['depth'] * $product['width'] * $product['height'] * $product['cart_quantity'];
+        }
+        if (is_null($cell)) {
+            $cell = array('width' => 100, 'height' => 100, 'depth' => 100);
         }
         // увеличить объем на 10%
         $volume *= 1.1;
@@ -296,5 +276,16 @@ class Cart
         }
 
         return $package;
+    }
+
+    public function getSumPayment()
+    {
+        // $this->order_total
+        return 0.0;
+    }
+
+    public function getValue()
+    {
+        return $this->order_total;
     }
 }

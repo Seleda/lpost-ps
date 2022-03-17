@@ -11,14 +11,18 @@ class Configuration
 {
     private static $instance;
 
+    // general tab
     private $test = 0;
     private $secret_key = 'tFSMWYaJ9YuxkeB6'; //product tFSMWYaJ9YuxkeB6 //test 9m8D4azqhYL8pMsn
-    private $api_key;
-    private $id_sklad = 3;
-    private $seller_name;
+    private $yandex_api_key;
     private $issue_type = 0;
-    private $one_package = 0;
+    private $products_is_one_package = 0;
     private $all_is_one_package = 0;
+    // location tab
+    private $id_sklad = 3;
+    private $address_sklad = '';
+    //
+    private $seller_name;
     private $delivery_cost_impact;
     private $value = 100;
     private $weight_unit = 1;
@@ -33,6 +37,7 @@ class Configuration
     private $total_correction;
     private $product_price_reduction;
     private $impact_percent_of_cart;
+    // log tab
     private $write_log = 1;
 
     private $default_categories = array();
@@ -41,8 +46,15 @@ class Configuration
     private function __construct()
     {
         foreach (Db::getInstance()->executeS('SELECT * FROM `'._DB_PREFIX_.'lpost_configuration`') as $val) {
+            if (!property_exists($this, $val['name'])) {
+                continue;
+            }
             $this->{$val['name']} = $val['value'];
         }
+
+        $sql = 'SELECT CONCAT(`City`, ", ", `Address`) as `concat_address` FROM `'._DB_PREFIX_.'lpost_receive_point` WHERE `ID_Sklad` = '.(int)$this->id_sklad;
+        $this->address_sklad = Db::getInstance()->getValue($sql);
+
         $this->setDefaultCategories();
         $this->setStatuses();
     }
@@ -120,12 +132,22 @@ class Configuration
         $this->{$name} = $value;
     }
 
+    public function __get($name)
+    {
+        if (!property_exists($this, $name)) {
+            throw new Exception('The property does not exist');
+        }
+        return $this->{$name};
+    }
+
     public static function save($data = null)
     {
         $res = true;
 
         if (is_null($data)) {
             $data = self::getInstance()->getArray();
+            unset($data['default_categories']);
+            unset($data['statuses']);
         }
         foreach ($data as $name => $value) {
             $res &= Db::getInstance()->insert(

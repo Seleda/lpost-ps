@@ -26,7 +26,8 @@ class Client
         $data = array('method' => 'Auth', 'secret' => ConfL::get('secret_key'));
 
         // Л-Пост возвращает valid_till по времени сервера клиента
-        if (!$token || !isset($token['valid_till']) || time() + 60 > strtotime($token['valid_till'])) { // 1 минута погрешность
+        // requirement 3.9 Обновлять токен каждые 55 минут
+        if (!$token || !isset($token['valid_till']) || time() + 300 > strtotime($token['valid_till'])) { // 300 = 5 минут
             $curl = curl_init();
 
             curl_setopt_array($curl, array(
@@ -62,11 +63,7 @@ class Client
         return self::$instance;
     }
 
-    public function getReceivePoints()
-    {
-
-    }
-
+    // req 3.8 Обновлять каждые 24 часа
     public function getPickupPoints($params = array())
     {
         $json = urlencode(json_encode($params));
@@ -97,7 +94,82 @@ class Client
             return false;
         }
 
-        return $response['JSON_TXT'];
+        $points = json_decode($response['JSON_TXT'], true);
 
+        return $points['PickupPoint'];
+    }
+
+    // req 3.10 Обновлять каждые 24 часа
+    public function getReceivePoints($params = array())
+    {
+        $json = urlencode(json_encode($params));
+
+        $url = $this->domen.'?method=GetReceivePoints&ver=1&token='.$this->token.'&json='.$json;
+
+        $curl = curl_init();
+
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+        ));
+
+        $response = curl_exec($curl);
+        $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        Logger::addMessage('getReceivePoints', 'Code '.$code, $url, $response);
+
+        $response = json_decode($response, true);
+        if (!isset($response['JSON_TXT'])) {
+            return false;
+        }
+
+        $points = json_decode($response['JSON_TXT'], true);
+
+        return $points['ReceivePoints'];
+    }
+
+    public function GetServicesCalc($params = array())
+    {
+        $json = urlencode(json_encode($params));
+
+        $url = $this->domen.'?method=GetServicesCalc&ver=1&token='.$this->token.'&json='.$json;
+
+        $curl = curl_init();
+
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+        ));
+
+        $response = curl_exec($curl);
+        $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        Logger::addMessage('getServicesCalc', 'Code '.$code, json_encode($params, JSON_UNESCAPED_UNICODE), $response);
+
+        $response = json_decode($response, true);
+        if (!isset($response['JSON_TXT'])) {
+            return false;
+        }
+        $result = json_decode($response['JSON_TXT'], true);
+        return $result['JSON_TXT'][0];
+    }
+
+    public static function geoCode($address)
+    {
+        return json_decode(file_get_contents('https://geocode-maps.yandex.ru/1.x?geocode='.(urlencode($address)).'&apikey='.ConfL::get('yandex_api_key').'&sco=longlat&format=json&lang=ru_RU'), true);
     }
 }
