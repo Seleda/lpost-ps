@@ -6,7 +6,8 @@
     "autoload": {
         "psr-4": {
             "Seleda\\LPostPs\\": "src/",
-            "Seleda\\LPostPs\\Carrier\\": "src/carrier/"
+            "Seleda\\LPostPs\\Carrier\\": "src/carrier/",
+            "Seleda\\LPostPs\\Order\\": "src/order/"
         }
     },
     "license": [
