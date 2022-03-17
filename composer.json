@@ -1,6 +1,6 @@
 {
     "name": "seleda/lpost-ps",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Prestashop package for L-Post",
     "type": "library",
     "autoload": {
