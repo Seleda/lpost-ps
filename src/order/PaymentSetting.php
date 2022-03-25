@@ -4,6 +4,7 @@
 namespace Seleda\LPostPs\Order;
 
 use \ObjectModel;
+use \Db;
 
 class PaymentSetting extends ObjectModel
 {
@@ -26,7 +27,7 @@ class PaymentSetting extends ObjectModel
     {
         $sql = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'lpost_payment_setting` (
             `id_payment_setting` INT(10) NOT NULL AUTO_INCREMENT,
-            `$id_order_lpost` VARCHAR(32) NOT NULL,
+            `id_order_lpost` VARCHAR(32) NOT NULL,
             `ValueSumRansom` DECIMAL(9,2) NOT NULL,
             `ValueSumDelivery` DECIMAL(9,2) NOT NULL,
             PRIMARY KEY  (`id_payment_setting`),

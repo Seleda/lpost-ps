@@ -5,6 +5,7 @@ namespace Seleda\LPostPs\Order;
 
 use Matrix\Exception;
 use \ObjectModel;
+use \Db;
 
 class Product extends ObjectModel
 {
@@ -60,5 +61,45 @@ class Product extends ObjectModel
             throw new Exception('NDS required for product!!!');
         }
         return parent::update($null_values);
+    }
+
+    public function getCreateOrdersParams()
+    {
+        return array(
+            'IDProductPartner' => $this->IDProductPartner,
+            'NameShort' => $this->NameShort,
+            'Price' => $this->Price,
+            'Barcode' => $this->Barcode,
+            'NDS' => $this->NDS,
+            'Quantity' => $this->Quantity,
+            'isFragile' => $this->isFragile
+        );
+    }
+
+    public static function createTableDb()
+    {
+        $sql = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'lpost_product` (
+            `id_product` INT(10) NOT NULL AUTO_INCREMENT,
+            `id_cargo` INT(10) NOT NULL,
+            `isFragile` INT(1) NOT NULL,
+            `DocumentType` INT(1) NOT NULL,
+            `IDProductPartner` VARCHAR(32) NOT NULL,
+            `ID_PartnerWarehouse` INT(10) NOT NULL,
+            `NameShort` VARCHAR(256) NOT NULL,
+            `Price` DECIMAL(9,2) NOT NULL,
+            `Barcode` VARCHAR(64) NOT NULL,
+            `NDS` INT(2) NOT NULL,
+            `Quantity` INT(5) NOT NULL,
+            PRIMARY KEY  (`id_product`),
+            KEY `id_cargo` (`id_cargo`)
+        ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
+
+        return Db::getInstance()->execute($sql);
+    }
+
+    public static function deleteTableDb()
+    {
+        $sql = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'lpost_product`';
+        return Db::getInstance()->execute($sql);
     }
 }

@@ -6,16 +6,21 @@ namespace Seleda\LPostPs\Order;
 use \ObjectModel;
 use \Context;
 use \Db;
+use \Module;
 
 class Order extends ObjectModel implements IOrder
 {
     const ENTITY_PERSON = 0;
     const ENTITY_LEGAL = 1;
 
-    public $id_order;
+    public $id_order_ps;
 
     public $PartnerNumber;
     public $ID_PickupPoint;
+    public $ID_Order;
+    public $LabelUml;
+    public $AddToAct;
+    public $Message;
     public $ID_Sklad;
     public $ID_PartnerWarehouse;
     public $IssueType;
@@ -44,12 +49,18 @@ class Order extends ObjectModel implements IOrder
     public $SellerName;
     public $Cargoes = array();
 
+    public $OrderState;
+
     public static $definition = array(
         'table' => 'lpost_order',
         'primary' => 'id_order_lpost',
         'fields' => array(
-            'id_order' => array('type' => self::TYPE_INT, 'validate' => 'isInt', 'required' => true),
+            'id_order_ps' => array('type' => self::TYPE_INT, 'validate' => 'isInt', 'required' => true),
             'PartnerNumber' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'required' => true),
+            'ID_Order' => array('type' => self::TYPE_STRING, 'validate' => 'isString'),
+            'LabelUml' => array('type' => self::TYPE_STRING, 'validate' => 'isUrl'),
+            'AddToAct' => array('type' => self::TYPE_DATE),
+            'Message' => array('type' => self::TYPE_STRING, 'validate' => 'isString'),
             'ID_PickupPoint' => array('type' => self::TYPE_INT, 'validate' => 'isInt'),
             'ID_Sklad' => array('type' => self::TYPE_INT, 'validate' => 'isInt', 'required' => true),
             'ID_PartnerWarehouse' => array('type' => self::TYPE_INT, 'validate' => 'isInt'),
@@ -62,7 +73,7 @@ class Order extends ObjectModel implements IOrder
             'Latitude' => array('type' => self::TYPE_FLOAT, 'validate' => 'isFloat'),
             'Longitude' => array('type' => self::TYPE_FLOAT, 'validate' => 'isFloat'),
             'Comment' => array('type' => self::TYPE_STRING, 'validate' => 'isString'),
-            'DateDeliv' => array('type' => self::TYPE_DATE, 'validate' => 'isDate'),
+            'DateDeliv' => array('type' => self::TYPE_DATE),
             'TypeIntervalDeliv' => array('type' => self::TYPE_INT, 'validate' => 'isInt'),
             'Value' => array('type' => self::TYPE_FLOAT, 'validate' => 'isFloat', 'required' => true),
             'SumPayment' => array('type' => self::TYPE_FLOAT, 'validate' => 'isFloat', 'required' => true),
@@ -88,9 +99,21 @@ class Order extends ObjectModel implements IOrder
             $this->PaymentSettings[] = new PaymentSetting($val['id_payment_setting']);
         }
 
-        foreach (Db::getInstance()->executeS('SELECT `id_cargo` FROM `'._DB_PREFIX_.'lpost_payment_setting` WHERE `id_order_lpost` = '.(int)$this->id) as $val) {
-
+        foreach (Db::getInstance()->executeS('SELECT `id_cargo` FROM `'._DB_PREFIX_.'lpost_cargo` WHERE `id_order_lpost` = '.(int)$this->id) as $val) {
+            $this->Cargoes[] = new Cargo($val['id_cargo']);
         }
+
+        $this->OrderState = OrderState::getInstanceByIdOrderLP($this->id);
+    }
+
+    public static function getCollection($id_order)
+    {
+        $collection = array();
+        $sql = 'SELECT `id_order_lpost` FROM `'._DB_PREFIX_.'lpost_order` WHERE `id_order_ps` = '.(int)$id_order;
+        foreach (Db::getInstance()->executeS($sql) as $val) {
+            $collection[] = new self($val['id_order_lpost']);
+        }
+        return $collection;
     }
 
     public function add($auto_date = true, $null_values = false)
@@ -111,6 +134,71 @@ class Order extends ObjectModel implements IOrder
         return parent::update($null_values);
     }
 
+    public function delete()
+    {
+        $this->OrderState->delete();
+        $this->deleteCargoes();
+        return parent::delete();
+    }
+
+    public function deleteCargoes()
+    {
+        foreach ($this->Cargoes as $cargo) {
+            $cargo->deleteProducts();
+            $cargo->delete();
+        }
+
+        $this->Cargoes = array();
+    }
+
+    public function getCargoesString()
+    {
+        $weight = 0;
+        foreach ($this->Cargoes as $cargo) {
+            $weight += $cargo->Weight;
+        }
+        return Module::getInstanceByName('lpost')->l('Number of cargoes: ').count($this->Cargoes).', 
+        '.Module::getInstanceByName('lpost')->l('Weight: ').$weight.' гр.';
+    }
+
+    public function getCreateOrdersParams($update = false)
+    {
+        $params = array(
+            'PartnerNumber' => $this->PartnerNumber,
+            'ID_PickupPoint' => $this->ID_PickupPoint,
+            'ID_Sklad' => $this->ID_Sklad,
+            'IssueType' => $this->IssueType,
+            'Value' => $this->Value,
+            'SumPayment' => $this->SumPayment,
+            'SumPrePayment' => $this->SumPrePayment,
+            'SumDelivery' => $this->SumDelivery,
+            'SumServices' => $this->SumServices,
+            'CustomerNumber' => $this->CustomerNumber,
+            'CustomerName' => $this->CustomerName,
+            'Phone' => $this->Phone,
+            'Email' => $this->Email,
+            'isEntity' => $this->isEntity,
+            'SellerName' => $this->SellerName,
+            'OrderType' => 1,
+            'Cargoes' => $this->getCreateOrdersCargoes()
+        );
+
+        if ($update) {
+            $params['ID_Order'] = $this->ID_Order;
+        }
+
+        return array('Order' => $params);
+    }
+
+    private function getCreateOrdersCargoes()
+    {
+        $cargoes = array();
+        foreach ($this->Cargoes as $cargo) {
+            $cargoes[] = $cargo->getCreateOrdersParams();
+        }
+        return $cargoes;
+    }
+
     public function getTypeIntervalDelivString()
     {
         //TODO
@@ -120,8 +208,12 @@ class Order extends ObjectModel implements IOrder
     {
         $sql = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'lpost_order` (
             `id_order_lpost` INT(10) NOT NULL AUTO_INCREMENT,
-            `id_order` INT(10) NOT NULL,
+            `id_order_ps` INT(10) NOT NULL,
             `PartnerNumber` VARCHAR(32) NOT NULL,
+            `ID_Order` VARCHAR(32) NOT NULL,
+            `LabelUml` VARCHAR(256) NOT NULL,
+            `AddToAct` DATETIME NOT NULL,
+            `Message` VARCHAR(256) NOT NULL,
             `ID_PickupPoint` INT(10) NOT NULL,
             `ID_Sklad` INT(10) NOT NULL,
             `ID_PartnerWarehouse` INT(10) NOT NULL,
@@ -148,10 +240,14 @@ class Order extends ObjectModel implements IOrder
             `Phone` VARCHAR(32) NOT NULL,
             `Email` VARCHAR(32) NOT NULL,
             PRIMARY KEY  (`id_order_lpost`),
-            KEY `id_order` (`id_order`)
+            KEY `ID_Order` (`ID_Order`),
+            KEY `id_order_ps` (`id_order`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
 
-        return Db::getInstance()->execute($sql);
+        return Db::getInstance()->execute($sql) &&
+            OrderState::createTableDb() &&
+            PaymentSetting::createTableDb() &&
+            Cargo::createTableDb();
     }
 
     public static function deleteTableDb()

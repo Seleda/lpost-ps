@@ -26,12 +26,15 @@
 
 namespace Seleda\LPostPs;
 
-use \Order as OrderPs;
+use \OrderCore as OrderPs;
 use \Cart as CartPs;
 use \Product;
 use \Combination;
 use \Db;
+use Seleda\LPostPs\Order\Cargo;
 use \Tools;
+use \Seleda\LPostPs\Order\Product as ProductLP;
+use \Seleda\LPostPs\Configuration as ConfLP;
 
 class Cart
 {
@@ -42,6 +45,8 @@ class Cart
      * @var string cart or order
      */
     public $source;
+
+    public $id_cart;
 
     public $currency;
 
@@ -57,7 +62,7 @@ class Cart
         $this->currency = Currency::getCurrency($obj->id_currency);
     }
 
-    public function createFromOrder(OrderPs $order)
+    public static function createFromOrder(OrderPs $order)
     {
         $obj = new self($order);
         $obj->source = 'order';
@@ -85,11 +90,14 @@ class Cart
             $obj->products[$key]['id_category'] = $product['id_category'];
             $obj->products[$key]['price'] = $product['total_price_tax_incl'];
             $obj->products[$key]['cost'] = $product['original_product_price'];
+            $obj->products[$key]['NDS'] = $product_obj->getTaxesRate();
             $obj->products[$key]['width'] = self::getProductDimension($product, 'width');
             $obj->products[$key]['height'] = self::getProductDimension($product, 'height');
             $obj->products[$key]['depth'] = self::getProductDimension($product, 'length');
             $obj->products[$key]['weight'] = self::getProductWeight($product);
         }
+
+        return $obj;
     }
 
     public static function createFromCart(CartPs $cart)
@@ -131,8 +139,8 @@ class Cart
     public static function getProductWeight($product)
     {
         $weight = 0;
-        ($weight_unit = Configuration::get('weight_unit')) || ($weight_unit = 1); // 1 - gr or 1000 - kg // TODO lb 453,59237 g
-        ($volume_unit = Configuration::get('volume_unit')) || ($volume_unit = 1); // 1 - sm or 0.1 - mm
+        ($weight_unit = ConfLP::get('weight_unit')) || ($weight_unit = 1); // 1 - gr or 1000 - kg // TODO lb 453,59237 g
+        ($volume_unit = ConfLP::get('volume_unit')) || ($volume_unit = 1); // 1 - sm or 0.1 - mm
 
         $impact = 0;
         if (Combination::isFeatureActive()) {
@@ -141,7 +149,7 @@ class Cart
                         WHERE `id_product_attribute` = '.(int)$product['id_product_attribute']);
         }
 
-        $default_categories = Configuration::get('default_categories');
+        $default_categories = ConfLP::get('default_categories');
 
         if ((float)$product['weight'] == 0 || $impact != 0) {
             $weight += $impact * $weight_unit;
@@ -155,14 +163,14 @@ class Cart
             $volume = $width * $height * $length / 5; // объемный вес
             $weight += round($volume);
         } else {
-            $default_categories = Configuration::get('default_categories');
+            $default_categories = ConfLP::get('default_categories');
             if (isset($default_categories[$product['id_category']]) && (int)$default_categories[$product['id_category']]['weight'] > 0) {
                 $weight += $default_categories[$product['id_category']]['weight'] * $weight_unit;
             }
         }
 
         if ($weight == 0) {
-            $weight = Configuration::get('default_weight') * $weight_unit;
+            $weight = ConfLP::get('default_weight') * $weight_unit;
         }
 
         return (int) Tools::ps_round($weight, 0);
@@ -175,9 +183,9 @@ class Cart
         if (isset($cache[$cache_key])) {
             return $cache[$cache_key];
         }
-        ($volume_unit = Configuration::get('volume_unit')) || $volume_unit = 1; // 1 - sm or 0.1 - mm
+        ($volume_unit = ConfLP::get('volume_unit')) || $volume_unit = 1; // 10 - sm or 1 - mm
 
-        $default_categories = Configuration::get('default_categories');
+        $default_categories = ConfLP::get('default_categories');
 
         $p_dimension = $dimension == 'length' ? 'depth' : $dimension;
 
@@ -186,7 +194,7 @@ class Cart
         } elseif (isset($default_categories[$product['id_category']]) && $default_categories[$product['id_category']][$dimension]) {
             $cache[$cache_key] = (int)$default_categories[$product['id_category']][$dimension] * $volume_unit;
         } elseif (!$for_weight) {
-            $cache[$cache_key] = (int)Configuration::get('default_'.$dimension) * $volume_unit;
+            $cache[$cache_key] = (int)ConfLP::get('default_'.$dimension) * $volume_unit;
         } else {
             $cache[$cache_key] = 0;
         }
@@ -218,22 +226,47 @@ class Cart
         $length = pow($volume / ($ratio['width'] * $ratio['height']), 1/3);
 
         $dimensions = array(
-            'length' => Tools::ps_round($length),
-            'width' => Tools::ps_round($length * $ratio['width']),
-            'height' => Tools::ps_round($length * $ratio['height'])
+            Tools::ps_round($length),
+            Tools::ps_round($length * $ratio['width']),
+            Tools::ps_round($length * $ratio['height'])
         );
 
         return $dimensions;
     }
 
+    public function createCargoes($id_order_lp)
+    {
+        $cargo = new Cargo();
+        $cargo->id_order_lpost = $id_order_lp;
+
+        foreach ($this->products as $product) {
+            $obj = new ProductLP();
+            $obj->IDProductPartner = $product['id_product'].'_'.$product['id_product_attribute'];
+            $obj->Price = $product['price'];
+            $obj->NameShort = $product['name'];
+            $obj->NDS = $product['NDS'];
+            $obj->Quantity = $product['cart_quantity'];
+            $cargo->Product[] = $obj;
+        }
+
+        $cargo->Weight = $this->getTotalWeight();
+        list($cargo->Length, $cargo->Width, $cargo->Height) = $this->getTotalDimensions();
+        $cargo->save();
+        foreach ($cargo->Product as $product) {
+            $product->id_cargo = $cargo->id;
+            $product->save();
+        }
+        return array($cargo);
+    }
+
     public function createPackages()
     {
         $packages = array();
-        if (ConfigurationCdek::get('all_is_one_package')) {
+        if (ConfLP::get('all_is_one_package')) {
             $packages[] = self::createPackage($this->products, 1);
         } else {
             foreach ($this->products as $product) {
-                if (ConfigurationCdek::get('one_package')) {
+                if (ConfLP::get('one_package')) {
                     for ($i = 0; $i < $product['cart_quantity']; $i++) {
                         $packages[] = self::createPackage($product,count($packages) + 1, 1);
                     }

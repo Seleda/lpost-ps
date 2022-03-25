@@ -27,6 +27,7 @@
 namespace Seleda\LPostPs;
 
 use \Db;
+use \Exception;
 
 class Currency
 {
