@@ -1,6 +1,6 @@
 <?php
 
-namespace Seleda\LPostPs\Calculator\Calculator;
+namespace Seleda\LPostPs\Calculator;
 
 use \Db;
 use \Seleda\LPostPs\Cart;
@@ -240,7 +240,7 @@ class Calculator implements ICalculator
             `DayLogistic` INT(2) NOT NULL,
             `PossibleDelivDates` VARCHAR(64) NOT NULL,
             `DateClose` VARCHAR(32) NOT NULL,
-            PRIMARY KEY  (`id_cart`, `id_order`, `type`)
+            PRIMARY KEY  (`id_cart`, `type`)
             ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
 
         return Db::getInstance()->execute($sql);

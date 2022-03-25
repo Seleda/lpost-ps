@@ -1,7 +1,7 @@
 <?php
 
 
-namespace Seleda\LPostPs\Calculator\Calculator;
+namespace Seleda\LPostPs\Calculator;
 
 
 interface ICalculator
